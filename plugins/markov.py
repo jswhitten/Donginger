@@ -93,8 +93,8 @@ class Markov(Plugin):
                 then = time()
                 print "Processed %s (%s items) in %s seconds." % (
                     name, len(self.chains[name]), round((then - now), 3))
-            except IOError:
-                print "Skipped %s." % (name)
+            except IOError as ioe:
+                print "WARNING: Skipped markov text file %s: %s." % (name, ioe)
 
     def add_body(self, name, file):
         self.chains[name] = {}

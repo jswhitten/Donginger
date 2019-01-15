@@ -42,9 +42,7 @@ def parse_conf():
         for net in dong.config['archival']:
             table_schema = [net, {"time": "datetime",
                                   "author": "string",
-                                  "message": "string"
-                                  }
-                            ]
+                                  "message": "string"}]
             dong.db.create_table(table_schema)
 
     # Importing the .py plugins then loading its config, if it exists.
@@ -54,6 +52,7 @@ def parse_conf():
 
 
 def load_plugin(filename):
+    """Load a plugin."""
     module = re.sub('plugins/', '', filename)
     module = re.sub(r'\.py', '', module)
 
@@ -81,12 +80,13 @@ def load_plugin(filename):
     dong.db.metadata.create_all(dong.db.con)
 
 
-def load_config(file):
+def load_config(filename):
+    """Load plugin configuration from a file."""
     try:
-        config_json = json.load(open(file))
+        config_json = json.load(open(filename))
 
     except ValueError as e:
-        print "Error parsing plugin configuration %s:" % file, e
+        print "Error parsing plugin configuration %s:" % filename, e
         sys.exit(1)
 
     return config_json
@@ -98,6 +98,12 @@ class TelnetConnector:
         self.tn = None
 
     def connect(self):
+        if not dong.config['host'] or not dong.config['port']:
+            print 'ERROR: MUD host/port not configured.'
+            sys.exit(1)
+        if not dong.config['username'] or not dong.config['password']:
+            print 'ERROR: MUD username/password not configured.'
+            sys.exit(1)
         self.tn = telnetlib.Telnet(dong.config['host'], dong.config['port'])
         self.read_until(" players)")
         self.write(
@@ -109,13 +115,11 @@ class TelnetConnector:
             for cmd in dong.config['first_commands']:
                 self.write(cmd)
 
-    def write(self, str):
+    def write(self, text):
         if self.tn:
-            # try:
             if self.debug:
-                print '> ' + str
-            self.tn.write(str + '\n')
-            # except: pass
+                print '> ' + text
+            self.tn.write(text + '\n')
         else:
             print 'No running telnet connection.'
             sys.exit(1)
@@ -136,7 +140,6 @@ class Processor:
 
     def __init__(self):
         self.ansi_pat = re.compile(r'\033\[[0-9;]+m')
-        #self.chat_pat = re.compile("\[(%s)\] \((.+?)\) (says|asks|exclaims), \"(.+)\"" % '|'.join(dong.config['monitored_nets'].keys()))
         self.chat_pat = re.compile(
             r"\[(%s)\] (.+) (says|asks|exclaims), \"(.+)\"" %
             '|'.join(
@@ -162,22 +165,15 @@ class Processor:
 
         # INTERRUPT EVERYTHING IF @PASTE-TO FOUND
         privpat = r"\-+Private message from (.+?)\-\-"
-        #privpat = "\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-Private message from (.+?)\-\-"
         privmatch = re.search(privpat, buf)
         if privmatch:
             self.private_caller = privmatch.group(1)
             self.private_msg = [buf]
             return
         if buf.find("--------------------------------end message") > -1:
-            #			print 'dialogue:', self.private_msg
             func = getattr(dong.plugins['pytoon'], 'main', None)
             if func:
-                #				print 'func called:', func
                 ret = func(self.private_caller, self.private_msg)
-#				self.private_caller = None
-#				self.private_msg = None
-#				print 'ret:', ret
-#				return ret
                 if ret:
                     con.write("-%s %s" % (self.private_caller, ret))
                 self.private_caller = None
@@ -186,7 +182,6 @@ class Processor:
                 self.private_caller = None
                 self.private_msg = None
         if self.private_msg is not None:
-            #			print 'appended:', buf
             self.private_msg.append(buf)
             return
 
@@ -217,9 +212,8 @@ class Processor:
         # Proper paging using the 'page' command
         # Quite an ugly hack
         if verb == 'page':
-            # This bit remove Donginger's name from the actual text
-            prefix = [alias for alias in dong.config['aliases']
-                      if line.startswith(alias)]
+            # Remove Donginger's name from the actual text
+            prefix = [alias for alias in dong.config['aliases'] if line.startswith(alias)]
             for p in prefix:
                 line = re.sub("^%s " % p, '', line)
 
@@ -269,6 +263,7 @@ class Processor:
                 return func(line, caller, argstr.strip())
 
     def archive_line(self, channel, caller, line):
+        """Save channel text to the database."""
         dong.db.insert(
             channel, {
                 'time': datetime.now(), 'author': caller, 'message': line})
@@ -279,7 +274,8 @@ class Processor:
         def spew(resp):
             if page:
                 con.write("page %s %s" % (caller, resp))
-            elif source in dong.config['monitored_nets'].keys() and dong.config['monitored_nets'][source] == 'read-write':
+            elif source in dong.config['monitored_nets'].keys() and \
+                 dong.config['monitored_nets'][source] == 'read-write':
                 con.write("%s %s" % (source[:-3], resp))
             else:
                 con.write("-%s %s" % (caller, resp))
@@ -291,8 +287,7 @@ class Processor:
 
         cmd = self.match_command(line)
         if cmd:
-            # This removes the command from the line of text itself, leaving on
-            # the rest
+            # This removes the command from the line of text itself, leaving the rest
             argstr = line[len(cmd):]
             response = self.dispatch(
                 dong.commands[cmd][0],
