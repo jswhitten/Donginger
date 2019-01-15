@@ -63,7 +63,7 @@ class Database:
 
         for col in table_data.items():
             col_name = col[0]
-            type = col[1]
+            data_type = col[1]
 
             if col_name == "constraints":
                 cons_col, cons_type = type.items()[0]
@@ -71,14 +71,14 @@ class Database:
                     constraints.append(UniqueConstraint(cons_col))
 
             else:
-                if type == 'integer':
-                    type = Integer()
-                elif type == 'string':
-                    type = String()
-                elif type == 'datetime':
-                    type = DateTime()
+                if data_type == 'integer':
+                    data_type = Integer()
+                elif data_type == 'string':
+                    data_type = String()
+                elif data_type == 'datetime':
+                    data_type = DateTime()
 
-                args.append(Column(col_name, type))
+                args.append(Column(col_name, data_type))
 
         # Constraints need to be defined after columns
         if constraints:
